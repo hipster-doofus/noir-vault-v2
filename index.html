@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-950 text-gray-100">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Noir Vault v2 – Discovery Engine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Oswald:wght@300;400;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --amber: #d97706;
+      --red:   #dc2626;
+      --gold:  #f59e0b;
+    }
+    body { font-family: 'Inter', sans-serif; background: #030712; }
+    h1, h2, .noir-font { font-family: 'Special Elite', cursive; }
+    .label-font { font-family: 'Oswald', sans-serif; }
+
+    /* Grain overlay */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      opacity: 0.35;
+    }
+
+    /* Cards */
+    .scene-card {
+      position: relative; overflow: hidden;
+      background: linear-gradient(160deg, #111827 0%, #0f172a 100%);
+      border: 1px solid #1f2937;
+      transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+    }
+    .scene-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--amber);
+      box-shadow: 0 0 24px rgba(217, 119, 6, 0.25);
+    }
+    .scene-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--amber), transparent);
+      opacity: 0;
+      transition: opacity .25s ease;
+    }
+    .scene-card:hover::before { opacity: 1; }
+
+    /* Pill filters */
+    .pill {
+      cursor: pointer; user-select: none;
+      border: 1px solid #374151;
+      transition: all .2s ease;
+    }
+    .pill:hover  { border-color: var(--amber); color: var(--gold); }
+    .pill.active { background: var(--amber); border-color: var(--amber); color: #000; font-weight: 600; }
+
+    /* Video modal */
+    #modal-backdrop {
+      display: none;
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(0,0,0,0.92);
+      align-items: center; justify-content: center;
+    }
+    #modal-backdrop.open { display: flex; }
+    #modal-box {
+      position: relative; width: min(90vw, 900px);
+      background: #0f172a; border: 1px solid #374151;
+      border-radius: 4px; overflow: hidden;
+    }
+    #modal-video { width: 100%; aspect-ratio: 16/9; background: #000; }
+    #modal-close {
+      position: absolute; top: 8px; right: 12px;
+      font-size: 1.5rem; cursor: pointer; color: #9ca3af;
+      transition: color .15s;
+    }
+    #modal-close:hover { color: #fff; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #111; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--amber); }
+
+    /* Search input */
+    .search-input {
+      background: #111827; border: 1px solid #374151; color: #f3f4f6;
+      outline: none; transition: border-color .2s;
+    }
+    .search-input:focus { border-color: var(--amber); }
+    .search-input::placeholder { color: #6b7280; }
+
+    /* Trope badge */
+    .trope-badge {
+      background: rgba(217, 119, 6, 0.12);
+      border: 1px solid rgba(217, 119, 6, 0.3);
+      color: var(--gold); font-size: 0.65rem;
+    }
+    .mood-badge {
+      background: rgba(220, 38, 38, 0.12);
+      border: 1px solid rgba(220, 38, 38, 0.3);
+      color: #f87171; font-size: 0.7rem;
+    }
+
+    /* Loader */
+    .spinner {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 3px solid #1f2937; border-top-color: var(--amber);
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Section divider */
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #374151 30%, #374151 70%, transparent);
+    }
+
+    /* Stats bar */
+    .stat-item { border-right: 1px solid #1f2937; }
+    .stat-item:last-child { border-right: none; }
+  </style>
+</head>
+<body class="min-h-screen relative z-10">
+
+<!-- ───────────────────── HEADER ───────────────────── -->
+<header class="relative overflow-hidden border-b border-gray-800/60">
+  <div class="absolute inset-0 bg-gradient-to-b from-gray-900 to-transparent opacity-60 pointer-events-none"></div>
+  <div class="relative max-w-7xl mx-auto px-6 py-10">
+    <!-- decorative lines -->
+    <div class="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-amber-600/40 to-transparent"></div>
+
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div>
+        <div class="label-font text-amber-600 text-xs tracking-[0.3em] uppercase mb-1">Dynamic Search Engine</div>
+        <h1 class="text-4xl md:text-5xl text-gray-100 leading-none">
+          Noir Vault <span class="text-amber-500">v2</span>
+        </h1>
+        <p class="mt-2 text-gray-400 text-sm max-w-lg">
+          AI-curated scenes from public domain cinema — discovered dynamically by keyword, genre, and era.
+        </p>
+      </div>
+      <div class="flex gap-3">
+        <a id="gh-link" href="https://github.com/hipster-doofus/noir-vault-v2" target="_blank"
+           class="label-font text-xs tracking-wider uppercase px-4 py-2 border border-gray-600 text-gray-400 hover:border-amber-600 hover:text-amber-400 transition-all">
+          ↗ GitHub
+        </a>
+        <button onclick="document.getElementById('about-modal').classList.toggle('open')"
+                class="label-font text-xs tracking-wider uppercase px-4 py-2 border border-amber-800/60 text-amber-500 hover:bg-amber-900/20 transition-all">
+          About
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div id="stats-bar" class="mt-8 flex flex-wrap border border-gray-800 divide-x divide-gray-800 text-center">
+      <div class="stat-item flex-1 px-4 py-3">
+        <div class="label-font text-2xl text-amber-400" id="stat-movies">–</div>
+        <div class="text-gray-500 text-xs uppercase tracking-widest mt-0.5">Films</div>
+      </div>
+      <div class="stat-item flex-1 px-4 py-3">
+        <div class="label-font text-2xl text-amber-400" id="stat-scenes">–</div>
+        <div class="text-gray-500 text-xs uppercase tracking-widest mt-0.5">Scenes</div>
+      </div>
+      <div class="stat-item flex-1 px-4 py-3">
+        <div class="label-font text-2xl text-amber-400" id="stat-genres">–</div>
+        <div class="text-gray-500 text-xs uppercase tracking-widest mt-0.5">Genres</div>
+      </div>
+      <div class="stat-item flex-1 px-4 py-3">
+        <div class="label-font text-2xl text-amber-400" id="stat-updated">–</div>
+        <div class="text-gray-500 text-xs uppercase tracking-widest mt-0.5">Last Run</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ───────────────────── SEARCH & FILTERS ───────────────────── -->
+<section class="max-w-7xl mx-auto px-6 py-6 space-y-4">
+
+  <!-- Keyword search -->
+  <div class="flex items-center gap-3">
+    <div class="relative flex-1">
+      <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">🔍</span>
+      <input type="text" id="kw-search" placeholder="Search titles, transcripts, descriptions, tropes…"
+             class="search-input w-full pl-9 pr-4 py-2.5 text-sm rounded-sm" />
+    </div>
+    <button onclick="clearSearch()" class="pill label-font text-xs uppercase tracking-wider px-4 py-2.5 text-gray-400">
+      Clear
+    </button>
+  </div>
+
+  <!-- Genre pills -->
+  <div>
+    <div class="label-font text-gray-500 text-xs uppercase tracking-widest mb-2">Genre</div>
+    <div class="flex flex-wrap gap-2" id="genre-pills">
+      <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm active" data-genre="All">All Genres</span>
+      <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-genre="Film Noir">Film Noir</span>
+      <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-genre="Crime & Gangster">Crime &amp; Gangster</span>
+      <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-genre="Mystery & Suspense">Mystery &amp; Suspense</span>
+      <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-genre="Psychological Thriller">Psychological Thriller</span>
+      <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-genre="Western Noir">Western Noir</span>
+      <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-genre="Gothic Horror">Gothic Horror</span>
+      <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-genre="Sci-Fi B-Movie">Sci-Fi B-Movie</span>
+      <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-genre="War & Espionage">War &amp; Espionage</span>
+    </div>
+  </div>
+
+  <!-- Era + Mood row -->
+  <div class="flex flex-wrap gap-6">
+    <div>
+      <div class="label-font text-gray-500 text-xs uppercase tracking-widest mb-2">Era</div>
+      <div class="flex flex-wrap gap-2" id="era-pills">
+        <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm active" data-era="All">All Eras</span>
+        <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-era="Pre-1930">Pre-1930</span>
+        <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-era="1930s">1930s</span>
+        <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-era="1940s">1940s</span>
+        <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-era="1950s">1950s</span>
+        <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-era="1960s+">1960s+</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="label-font text-gray-500 text-xs uppercase tracking-widest mb-2">Public Domain</div>
+      <div class="flex flex-wrap gap-2" id="pd-pills">
+        <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm active" data-pd="All">All</span>
+        <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-pd="true">PD Only ✓</span>
+        <span class="pill label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm" data-pd="false">Non-PD</span>
+      </div>
+    </div>
+
+    <div class="ml-auto self-end">
+      <div class="label-font text-gray-500 text-xs uppercase tracking-widest mb-2">Sort by</div>
+      <select id="sort-select" class="search-input label-font text-xs uppercase tracking-wider px-3 py-1.5 rounded-sm">
+        <option value="newest">Newest First</option>
+        <option value="oldest">Oldest Film</option>
+        <option value="title">Title A–Z</option>
+        <option value="duration">Duration</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="label-font text-gray-500 text-xs uppercase tracking-widest">
+    Showing <span id="result-count" class="text-amber-500">–</span> scenes
+  </div>
+</section>
+
+<!-- ───────────────────── MAIN GRID ───────────────────── -->
+<main class="max-w-7xl mx-auto px-6 pb-16">
+  <!-- Loading state -->
+  <div id="loading" class="flex flex-col items-center justify-center py-24 gap-4">
+    <div class="spinner"></div>
+    <div class="label-font text-gray-500 text-sm uppercase tracking-widest">Loading catalogue…</div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="empty-state" class="hidden flex-col items-center justify-center py-24 gap-4 text-center">
+    <div class="text-5xl opacity-30">🎞</div>
+    <div class="noir-font text-2xl text-gray-500">No scenes match your search</div>
+    <div class="text-gray-600 text-sm">Try removing some filters or broadening your keyword.</div>
+    <button onclick="clearSearch()" class="pill label-font text-xs uppercase tracking-wider px-4 py-2 text-amber-500 mt-2">
+      Reset All Filters
+    </button>
+  </div>
+
+  <!-- Cards grid -->
+  <div id="cards-grid" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+</main>
+
+<!-- ───────────────────── VIDEO MODAL ───────────────────── -->
+<div id="modal-backdrop" onclick="closeModal(event)">
+  <div id="modal-box">
+    <span id="modal-close" onclick="closeModal()">&times;</span>
+    <video id="modal-video" controls preload="none">
+      <p>Your browser doesn't support HTML5 video.</p>
+    </video>
+    <div class="p-4 space-y-2">
+      <h3 id="modal-title" class="noir-font text-xl text-gray-100"></h3>
+      <p id="modal-desc" class="text-gray-400 text-sm leading-relaxed"></p>
+      <div id="modal-tropes" class="flex flex-wrap gap-2 pt-1"></div>
+      <div class="flex gap-3 pt-2">
+        <a id="modal-download" href="#" download class="label-font text-xs uppercase tracking-wider px-4 py-2 bg-amber-600 text-black hover:bg-amber-500 transition-all">
+          ↓ Download
+        </a>
+        <a id="modal-archive" href="#" target="_blank" class="label-font text-xs uppercase tracking-wider px-4 py-2 border border-gray-600 text-gray-400 hover:border-amber-600 hover:text-amber-400 transition-all">
+          Archive.org ↗
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────── ABOUT MODAL ───────────────────── -->
+<div id="about-modal" class="fixed inset-0 z-50 bg-black/80 hidden items-center justify-center p-6"
+     onclick="this.classList.remove('open'); this.classList.add('hidden')">
+  <div class="bg-gray-900 border border-gray-700 max-w-lg w-full p-8 rounded-sm" onclick="event.stopPropagation()">
+    <h2 class="text-2xl text-amber-400 mb-4">About Noir Vault v2</h2>
+    <div class="space-y-3 text-sm text-gray-400 leading-relaxed">
+      <p>Noir Vault v2 is an AI-powered discovery engine for public domain cinema. Each run of the GitHub Actions workflow dynamically searches the <strong class="text-gray-300">Internet Archive</strong> using configurable keywords, genre, and era filters.</p>
+      <p>Films are processed by <strong class="text-gray-300">PySceneDetect</strong> (AdaptiveDetector) to identify cinematic cuts. Three random scenes per film are extracted, transcoded to 1080p H.264, and analysed by <strong class="text-gray-300">Gemini AI</strong> to produce descriptions, mood analysis, and noir trope identification.</p>
+      <p>Metadata is stored in <strong class="text-gray-300">Supabase</strong> (PostgreSQL) and scene clips are attached to GitHub Releases. All films are verified public domain from Archive.org.</p>
+    </div>
+    <button onclick="document.getElementById('about-modal').classList.remove('open'); document.getElementById('about-modal').classList.add('hidden')"
+            class="mt-6 label-font text-xs uppercase tracking-wider px-4 py-2 border border-gray-600 text-gray-400 hover:text-white transition-all">
+      Close
+    </button>
+  </div>
+</div>
+
+<!-- ───────────────────── FOOTER ───────────────────── -->
+<footer class="border-t border-gray-800 mt-4">
+  <div class="max-w-7xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-4">
+    <div class="label-font text-gray-600 text-xs uppercase tracking-widest">
+      Noir Vault v2 &nbsp;·&nbsp; Public Domain Cinema Archive
+    </div>
+    <div class="flex gap-4 text-xs text-gray-600">
+      <a href="https://archive.org" target="_blank" class="hover:text-amber-500 transition-colors">Internet Archive</a>
+      <a href="schema.sql" class="hover:text-amber-500 transition-colors">Schema</a>
+      <a href="catalog.json" class="hover:text-amber-500 transition-colors">Raw Catalog</a>
+    </div>
+  </div>
+</footer>
+
+<!-- ───────────────────── JAVASCRIPT ───────────────────── -->
+<script>
+// ── Config ────────────────────────────────────────────────
+// Replace these with your actual Supabase credentials (or leave blank to use catalog.json only)
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
+
+// ── State ─────────────────────────────────────────────────
+let allScenes = [];      // flat list of scene objects, each with movie metadata
+let filteredScenes = [];
+let activeGenre = 'All';
+let activeEra   = 'All';
+let activePD    = 'All';
+let activeSort  = 'newest';
+let searchTerm  = '';
+
+// ── Init ──────────────────────────────────────────────────
+(async function init() {
+  const data = await loadData();
+  buildSceneList(data);
+  updateStats(data);
+  applyFilters();
+  setupListeners();
+})();
+
+// ── Data Loading ──────────────────────────────────────────
+async function loadData() {
+  // 1. Try Supabase if configured
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    try {
+      const { createClient } = supabase;
+      const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data: movies } = await db.from('movies').select('*, scenes(*)');
+      if (movies && movies.length > 0) {
+        console.log(`Loaded ${movies.length} movies from Supabase`);
+        return { movies, source: 'supabase' };
+      }
+    } catch (e) {
+      console.warn('Supabase load failed, falling back to catalog.json:', e);
+    }
+  }
+
+  // 2. Fall back to catalog.json
+  try {
+    const r = await fetch('catalog.json?' + Date.now());
+    const data = await r.json();
+    console.log(`Loaded ${data.movies?.length ?? 0} movies from catalog.json`);
+    return { movies: data.movies || [], source: 'catalog', generated_at: data.generated_at };
+  } catch (e) {
+    console.error('catalog.json load failed:', e);
+    return { movies: [], source: 'error' };
+  }
+}
+
+function buildSceneList(data) {
+  allScenes = [];
+  for (const movie of (data.movies || [])) {
+    const sceneArray = movie.scenes || [];
+    for (const scene of sceneArray) {
+      allScenes.push({
+        ...scene,
+        movie_title:       movie.title,
+        movie_year:        movie.year,
+        movie_archive_id:  movie.archive_id || movie.id,
+        movie_genre:       movie.genre || 'Film Noir',
+        movie_pd:          movie.is_public_domain,
+        noir_tropes:       Array.isArray(scene.noir_tropes) ? scene.noir_tropes : [],
+      });
+    }
+  }
+}
+
+function updateStats(data) {
+  const movies  = data.movies || [];
+  const scenes  = movies.flatMap(m => m.scenes || []);
+  const genres  = new Set(movies.map(m => m.genre).filter(Boolean));
+  const updated = data.generated_at ? new Date(data.generated_at) : null;
+
+  document.getElementById('stat-movies').textContent = movies.length;
+  document.getElementById('stat-scenes').textContent = scenes.length;
+  document.getElementById('stat-genres').textContent = genres.size || '–';
+  document.getElementById('stat-updated').textContent = updated
+    ? updated.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    : '–';
+}
+
+// ── Filtering & Sorting ───────────────────────────────────
+function applyFilters() {
+  const kw = searchTerm.toLowerCase();
+
+  filteredScenes = allScenes.filter(s => {
+    // Keyword
+    if (kw) {
+      const haystack = [
+        s.movie_title, s.description, s.synopsis, s.transcript,
+        s.mood, ...(s.noir_tropes || [])
+      ].join(' ').toLowerCase();
+      if (!haystack.includes(kw)) return false;
+    }
+
+    // Genre
+    if (activeGenre !== 'All' && s.movie_genre !== activeGenre) return false;
+
+    // Era
+    if (activeEra !== 'All') {
+      const y = parseInt(s.movie_year);
+      if (isNaN(y)) return false;
+      if (activeEra === 'Pre-1930' && y >= 1930) return false;
+      if (activeEra === '1930s'    && (y < 1930 || y > 1939)) return false;
+      if (activeEra === '1940s'    && (y < 1940 || y > 1949)) return false;
+      if (activeEra === '1950s'    && (y < 1950 || y > 1959)) return false;
+      if (activeEra === '1960s+'   && y < 1960) return false;
+    }
+
+    // Public domain
+    if (activePD === 'true'  && !s.movie_pd) return false;
+    if (activePD === 'false' &&  s.movie_pd) return false;
+
+    return true;
+  });
+
+  // Sort
+  filteredScenes.sort((a, b) => {
+    if (activeSort === 'newest')   return (b.created_at || '') .localeCompare(a.created_at || '');
+    if (activeSort === 'oldest')   return (a.movie_year || 9999) - (b.movie_year || 9999);
+    if (activeSort === 'title')    return (a.movie_title || '').localeCompare(b.movie_title || '');
+    if (activeSort === 'duration') return (b.duration || 0) - (a.duration || 0);
+    return 0;
+  });
+
+  renderCards();
+}
+
+// ── Rendering ─────────────────────────────────────────────
+function renderCards() {
+  const grid  = document.getElementById('cards-grid');
+  const empty = document.getElementById('empty-state');
+  const loader= document.getElementById('loading');
+  const count = document.getElementById('result-count');
+
+  loader.classList.add('hidden');
+  count.textContent = filteredScenes.length;
+
+  if (filteredScenes.length === 0) {
+    grid.classList.add('hidden');
+    empty.classList.remove('hidden');
+    empty.classList.add('flex');
+    return;
+  }
+
+  empty.classList.add('hidden');
+  empty.classList.remove('flex');
+  grid.classList.remove('hidden');
+
+  grid.innerHTML = filteredScenes.map((s, i) => buildCard(s, i)).join('');
+}
+
+function buildCard(s, idx) {
+  const thumb  = s.thumbnail_url || 'https://images.unsplash.com/photo-1509023464722-18d996393ca8?w=640';
+  const title  = escHtml(s.movie_title || 'Unknown');
+  const year   = s.movie_year ? `(${s.movie_year})` : '';
+  const dur    = s.duration ? `${Math.round(s.duration)}s` : '';
+  const mood   = escHtml(s.mood || '');
+  const desc   = escHtml(s.description || '');
+  const tropes = (s.noir_tropes || []).slice(0, 3)
+    .map(t => `<span class="trope-badge px-2 py-0.5 rounded-sm">${escHtml(t)}</span>`)
+    .join('');
+
+  const dlBtn = s.download_url
+    ? `<a href="${escHtml(s.download_url)}" download class="label-font text-xs uppercase tracking-wider px-3 py-1.5 bg-amber-700/30 border border-amber-800/50 text-amber-400 hover:bg-amber-700/50 transition-all">↓ Download</a>`
+    : `<span class="label-font text-xs uppercase tracking-wider px-3 py-1.5 border border-gray-700/50 text-gray-600">No clip yet</span>`;
+
+  return `
+  <article class="scene-card rounded-sm cursor-pointer" onclick="openModal(${idx})">
+    <!-- Thumbnail -->
+    <div class="relative aspect-video overflow-hidden bg-gray-900">
+      <img src="${escHtml(thumb)}" alt="${title}" class="w-full h-full object-cover opacity-70 hover:opacity-90 transition-opacity duration-300" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1519120944692-1a8d8cfc107f?w=640'" />
+      <div class="absolute inset-0 bg-gradient-to-t from-gray-950/80 via-transparent to-transparent pointer-events-none"></div>
+      <!-- Duration badge -->
+      ${dur ? `<span class="absolute bottom-2 right-2 label-font text-xs bg-black/70 px-2 py-0.5 text-gray-300">${dur}</span>` : ''}
+      <!-- Scene num -->
+      <span class="absolute top-2 left-2 label-font text-xs bg-amber-700/80 text-black px-2 py-0.5">Scene ${s.scene_number || idx+1}</span>
+    </div>
+
+    <!-- Body -->
+    <div class="p-4 space-y-2">
+      <div>
+        <h2 class="noir-font text-lg text-gray-100 leading-tight">${title} <span class="text-amber-500 text-sm">${year}</span></h2>
+        ${mood ? `<span class="mood-badge px-2 py-0.5 rounded-sm inline-block mt-1">${mood}</span>` : ''}
+      </div>
+
+      ${desc ? `<p class="text-gray-400 text-sm leading-relaxed line-clamp-3">${desc}</p>` : ''}
+
+      <!-- Tropes -->
+      ${tropes ? `<div class="flex flex-wrap gap-1.5 pt-1">${tropes}</div>` : ''}
+
+      <!-- Genre tag -->
+      <div class="flex items-center justify-between pt-2">
+        <span class="label-font text-xs text-gray-600 uppercase tracking-wider">${escHtml(s.movie_genre || '')}</span>
+        <div class="flex gap-2" onclick="event.stopPropagation()">
+          ${dlBtn}
+        </div>
+      </div>
+    </div>
+  </article>`;
+}
+
+// ── Modal ─────────────────────────────────────────────────
+function openModal(idx) {
+  const s = filteredScenes[idx];
+  if (!s) return;
+
+  const title  = `${s.movie_title || 'Unknown'} ${s.movie_year ? '(' + s.movie_year + ')' : ''} – Scene ${s.scene_number || idx+1}`;
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-desc').textContent  = s.description || s.synopsis || '';
+
+  const tropesEl = document.getElementById('modal-tropes');
+  tropesEl.innerHTML = (s.noir_tropes || [])
+    .map(t => `<span class="trope-badge px-2 py-0.5 rounded-sm">${escHtml(t)}</span>`)
+    .join('');
+
+  const video = document.getElementById('modal-video');
+  if (s.download_url) {
+    video.src = s.download_url;
+    video.load();
+  } else {
+    video.removeAttribute('src');
+  }
+
+  const dl = document.getElementById('modal-download');
+  if (s.download_url) {
+    dl.href = s.download_url;
+    dl.classList.remove('opacity-40', 'pointer-events-none');
+  } else {
+    dl.href = '#';
+    dl.classList.add('opacity-40', 'pointer-events-none');
+  }
+
+  const archiveLink = document.getElementById('modal-archive');
+  if (s.movie_archive_id) {
+    archiveLink.href = `https://archive.org/details/${s.movie_archive_id}`;
+  } else {
+    archiveLink.href = '#';
+  }
+
+  document.getElementById('modal-backdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(event) {
+  if (event && event.target !== document.getElementById('modal-backdrop') && event.target !== document.getElementById('modal-close')) return;
+  if (event === undefined || event.target === document.getElementById('modal-close') || event.target === document.getElementById('modal-backdrop')) {
+    const video = document.getElementById('modal-video');
+    video.pause();
+    video.removeAttribute('src');
+    document.getElementById('modal-backdrop').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ── Listeners ─────────────────────────────────────────────
+function setupListeners() {
+  // Keyword search (debounced)
+  let debounce;
+  document.getElementById('kw-search').addEventListener('input', e => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      searchTerm = e.target.value.trim();
+      applyFilters();
+    }, 300);
+  });
+
+  // Genre pills
+  document.getElementById('genre-pills').querySelectorAll('.pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.getElementById('genre-pills').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeGenre = pill.dataset.genre;
+      applyFilters();
+    });
+  });
+
+  // Era pills
+  document.getElementById('era-pills').querySelectorAll('.pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.getElementById('era-pills').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeEra = pill.dataset.era;
+      applyFilters();
+    });
+  });
+
+  // PD pills
+  document.getElementById('pd-pills').querySelectorAll('.pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.getElementById('pd-pills').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activePD = pill.dataset.pd;
+      applyFilters();
+    });
+  });
+
+  // Sort
+  document.getElementById('sort-select').addEventListener('change', e => {
+    activeSort = e.target.value;
+    applyFilters();
+  });
+}
+
+function clearSearch() {
+  searchTerm = ''; activeGenre = 'All'; activeEra = 'All'; activePD = 'All';
+  document.getElementById('kw-search').value = '';
+  document.querySelectorAll('#genre-pills .pill').forEach((p,i) => p.classList.toggle('active', i===0));
+  document.querySelectorAll('#era-pills .pill').forEach((p,i) => p.classList.toggle('active', i===0));
+  document.querySelectorAll('#pd-pills .pill').forEach((p,i) => p.classList.toggle('active', i===0));
+  applyFilters();
+}
+
+function escHtml(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

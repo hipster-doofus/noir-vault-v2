@@ -1,0 +1,9 @@
+output/
+temp_workspace/
+*.pyc
+__pycache__/
+*.zip
+*.mp4
+*.avi
+*.mkv
+.env

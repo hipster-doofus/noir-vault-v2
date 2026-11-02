@@ -1,0 +1,56 @@
+{
+  "generated_at": "2026-01-01T00:00:00Z",
+  "pipeline_version": "2",
+  "movies": [
+    {
+      "id": "demo-movie-001",
+      "title": "Detour",
+      "year": 1945,
+      "director": "Edgar G. Ulmer",
+      "archive_id": "Detour",
+      "genre": "Film Noir",
+      "is_public_domain": true,
+      "scenes": [
+        {
+          "scene_number": 1,
+          "start_time": 312.5,
+          "end_time": 342.5,
+          "duration": 30.0,
+          "transcript": "You know, fate, or some mysterious force, can put the finger on you or me, for no good reason at all.",
+          "description": "A weary man sits at a diner counter, illuminated by neon light reflecting off rain-slicked glass.",
+          "synopsis": "Our anti-hero reflects on fate and bad luck in a roadside diner, the noir philosophy laid bare.",
+          "mood": "Melancholic, fatalistic",
+          "noir_tropes": ["unreliable narrator", "femme fatale setup", "fatalistic monologue"],
+          "thumbnail_url": "https://images.unsplash.com/photo-1509023464722-18d996393ca8?w=640",
+          "download_url": ""
+        },
+        {
+          "scene_number": 2,
+          "start_time": 890.0,
+          "end_time": 935.0,
+          "duration": 45.0,
+          "transcript": "There ought to be a law against dames with red hair.",
+          "description": "A close-up of a woman's face, half-hidden in shadow, cigarette smoke curling upward.",
+          "synopsis": "The femme fatale makes her entrance, immediately establishing dominance over the protagonist.",
+          "mood": "Threatening, seductive",
+          "noir_tropes": ["femme fatale", "chiaroscuro lighting", "sexual tension"],
+          "thumbnail_url": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=640",
+          "download_url": ""
+        },
+        {
+          "scene_number": 3,
+          "start_time": 2100.0,
+          "end_time": 2140.0,
+          "duration": 40.0,
+          "transcript": "No matter what I did, no matter how I tried to shake it, that shadow was always there.",
+          "description": "The protagonist walks alone down a dark highway, a single pair of headlights approaching in the distance.",
+          "synopsis": "Trapped by circumstance, the protagonist accepts his inevitable doom as the net closes in.",
+          "mood": "Desperate, doomed",
+          "noir_tropes": ["lone figure in darkness", "entrapment", "doom motif"],
+          "thumbnail_url": "https://images.unsplash.com/photo-1519120944692-1a8d8cfc107f?w=640",
+          "download_url": ""
+        }
+      ]
+    }
+  ]
+}

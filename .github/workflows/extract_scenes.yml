@@ -1,0 +1,148 @@
+name: Noir Vault v2 — Search, Extract & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      search_keyword:
+        description: 'Keyword Search (e.g. detective, heist, murder, femme fatale, boxer, gangster)'
+        required: false
+        default: ''
+        type: string
+      genre:
+        description: 'Genre / Category'
+        required: false
+        default: 'Film Noir'
+        type: choice
+        options:
+          - 'Film Noir'
+          - 'Crime & Gangster'
+          - 'Mystery & Suspense'
+          - 'Psychological Thriller'
+          - 'Western Noir'
+          - 'Gothic Horror'
+          - 'Sci-Fi B-Movie'
+          - 'War & Espionage'
+          - 'All Genres'
+      date_range:
+        description: 'Release Era / Date Range'
+        required: false
+        default: '1940-1959 (Classic Noir Era)'
+        type: choice
+        options:
+          - '1940-1959 (Classic Noir Era)'
+          - '1940-1949 (1940s Golden Age)'
+          - '1950-1959 (1950s Late Noir & Cold War)'
+          - '1930-1939 (Pre-Code Era)'
+          - '1920-1929 (Silent Era)'
+          - 'All Eras'
+      public_domain_only:
+        description: 'Verified Public Domain Only (hosted on Internet Archive)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      num_movies:
+        description: 'Number of movies to process per run (1–10)'
+        required: false
+        default: '3'
+        type: string
+      specific_archive_id:
+        description: 'Optional: Force a specific Internet Archive ID (overrides all search filters)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  search-extract-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install System Dependencies (FFmpeg)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Search, Extract & Index Pipeline
+        env:
+          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          SEARCH_KEYWORD:     ${{ github.event.inputs.search_keyword }}
+          SELECTED_GENRE:     ${{ github.event.inputs.genre || 'Film Noir' }}
+          DATE_RANGE:         ${{ github.event.inputs.date_range || '1940-1959 (Classic Noir Era)' }}
+          PUBLIC_DOMAIN_ONLY: ${{ github.event.inputs.public_domain_only || 'true' }}
+          NUM_MOVIES:         ${{ github.event.inputs.num_movies || '3' }}
+          ARCHIVE_ID_OVERRIDE: ${{ github.event.inputs.specific_archive_id }}
+        run: |
+          python pipeline.py
+
+      - name: Set Timestamp & Labels
+        run: |
+          echo "TIMESTAMP=$(date +'%Y-%m-%d-%H%M')" >> $GITHUB_ENV
+          echo "MOVIE_COUNT=${{ github.event.inputs.num_movies || '3' }}" >> $GITHUB_ENV
+
+      - name: Prepare GitHub Pages Site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          # catalog.json is written to repo root by pipeline.py
+          cp catalog.json _site/catalog.json
+          cp schema.sql _site/ 2>/dev/null || true
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2-run-${{ env.TIMESTAMP }}
+          name: "Noir Vault v2 | ${{ env.RUN_LABEL }} | ${{ env.MOVIE_COUNT }} Films (${{ env.TIMESTAMP }})"
+          body: |
+            ## Noir Vault v2 Run Report
+            - **Genre:** ${{ github.event.inputs.genre || 'Film Noir' }}
+            - **Era:** ${{ github.event.inputs.date_range || 'All Eras' }}
+            - **Keyword:** ${{ github.event.inputs.search_keyword || '(none)' }}
+            - **Films processed:** ${{ env.MOVIE_COUNT }}
+            - **Public domain only:** ${{ github.event.inputs.public_domain_only || 'true' }}
+          files: |
+            output/**/*.mp4
+            catalog.json
+        continue-on-error: true
+
+  deploy-pages:
+    needs: search-extract-publish
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
