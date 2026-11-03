@@ -422,7 +422,8 @@ def transcode_scene(src: Path, start: float, end: float, dest: Path) -> bool:
         "-ss", str(start),
         "-i", str(src),
         "-t", str(dur),
-        "-vf", "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+        #"-vf", "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+        "scale='if(lt(ih,1080),-2,iw)':'if(lt(ih,1080),1080,ih)':force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2"
         "-c:v", "libx264", "-preset", "fast", "-crf", "22",
         "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
