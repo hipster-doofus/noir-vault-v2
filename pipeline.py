@@ -80,8 +80,8 @@ GITHUB_ENV_FILE    = os.environ.get("GITHUB_ENV", "")
 WORKSPACE      = Path("temp_workspace")
 OUTPUT_DIR     = Path("output")
 CATALOG_PATH   = Path("catalog.json")
-SCENES_PER_MOVIE = 3
-MIN_SCENE_SECS   = 10
+SCENES_PER_MOVIE = 20
+MIN_SCENE_SECS   = 3
 MAX_SCENE_SECS   = 60
 
 # Genre → search term mapping
