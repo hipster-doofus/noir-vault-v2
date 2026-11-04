@@ -80,7 +80,7 @@ GITHUB_ENV_FILE    = os.environ.get("GITHUB_ENV", "")
 WORKSPACE      = Path("temp_workspace")
 OUTPUT_DIR     = Path("output")
 CATALOG_PATH   = Path("catalog.json")
-SCENES_PER_MOVIE = 40
+SCENES_PER_MOVIE = 60
 MIN_SCENE_SECS   = 30
 MAX_SCENE_SECS   = 180
 
