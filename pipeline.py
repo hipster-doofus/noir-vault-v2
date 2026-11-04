@@ -418,37 +418,17 @@ def transcode_scene(src: Path, start: float, end: float, dest: Path) -> bool:
     """Extract and transcode a scene clip to 1080p MP4."""
     dur = end - start
     cmd = [
-    FFMPEG_BIN,
-    "-y",
-    "-ss",
-    str(start),
-    "-i",
-    str(src),
-    "-t",
-    str(dur),
-    # Choose ONE scale option below:
-    "-vf",
-    (
-        "scale=min(1920,iw):min(1080,ih):force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setpts=PTS-STARTPTS"
-    ),
-    # OR if using the second scale filter:
-    # "-vf", "scale=if(lt(ih,1080),-2,iw):if(lt(ih,1080),1080,ih):force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setpts=PTS-STARTPTS",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "fast",
-    "-crf",
-    "22",
-    "-c:a",
-    "aac",
-    "-af",
-    "asetpts=PTS-STARTPTS",
-    "-b:a",
-    "192k",
-    "-movflags",
-    "+faststart",
-    str(dest),
-]
+        FFMPEG_BIN, "-y",
+        "-ss", str(start),
+        "-i", str(src),
+        "-t", str(dur),
+        #"-vf", "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+        "-vf", "scale='if(lt(ih,1080),-2,iw)':'if(lt(ih,1080),1080,ih)':force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart",
+        str(dest),
+    ]
     try:
         result = subprocess.run(cmd, capture_output=True, timeout=300)
         if result.returncode != 0:
