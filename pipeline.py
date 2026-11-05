@@ -81,7 +81,7 @@ WORKSPACE = Path("temp_workspace")
 OUTPUT_DIR = Path("output")
 CATALOG_PATH = Path("catalog.json")
 
-SCENES_PER_MOVIE = int(os.environ.get("SCENES_PER_MOVIE", "5"))
+SCENES_PER_MOVIE = int(os.environ.get("SCENES_PER_MOVIE", "10"))
 MIN_SCENE_SECS = 15
 MAX_SCENE_SECS = 180
 
