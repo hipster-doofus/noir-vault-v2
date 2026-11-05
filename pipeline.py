@@ -631,8 +631,11 @@ def process_movie(movie: dict, workspace: Path, output_dir: Path) -> dict | None
     clips_dir = output_dir / re.sub(r'[^A-Za-z0-9_-]', '_', movie["id"])[:40]
     clips_dir.mkdir(parents=True, exist_ok=True)
 
+    # Clean the title so it is safe for all operating systems
+    safe_title = re.sub(r'[^A-Za-z0-9_-]', '_', movie["title"])[:40].strip('_')
+
     for i, (start, end) in enumerate(scenes, 1):
-        clip_name = f"scene_{i:02d}_{int(start):05d}s.mp4"
+        clip_name = f"{safe_title}_scene_{i:02d}_{int(start):05d}s.mp4"
         clip_path = clips_dir / clip_name
         print(f"\n  🎞  Scene {i}: {start:.1f}s → {end:.1f}s ({end-start:.0f}s)")
 
