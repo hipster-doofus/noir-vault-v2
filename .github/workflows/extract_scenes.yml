@@ -82,8 +82,8 @@ jobs:
       - name: Install System Dependencies (FFmpeg & yt-dlp)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg zip ca-certificates wget
-          sudo wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp
+          sudo apt-get install -y ffmpeg zip
+          sudo wget [https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp) -O /usr/local/bin/yt-dlp
           sudo chmod a+rx /usr/local/bin/yt-dlp
 
       - name: Install Python Dependencies
@@ -121,6 +121,7 @@ jobs:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:         ${{ secrets.SUPABASE_KEY }}
           GEMINI_API_KEY:       ${{ secrets.GEMINI_API_KEY }}
+          HF_TOKEN:             ${{ secrets.HF_TOKEN }}
           MODE:                 ${{ github.event.client_payload.mode || 'auto' }}
           SELECTED_MOVIES_JSON: ${{ toJson(github.event.client_payload.movies) }}
           SEARCH_KEYWORD:       ${{ github.event.inputs.search_keyword || github.event.client_payload.search_keyword }}
@@ -136,11 +137,13 @@ jobs:
       - name: Zip Output Clips (Backup Strategy)
         if: always()
         run: |
-          if [ -d "output" ] && [ "$(ls -A output 2>/dev/null)" ]; then
-            cd output && zip -r ../output_videos.zip . && cd ..
+          mkdir -p output
+          if [ -n "$(ls -A output 2>/dev/null)" ]; then
+            zip -r output_videos.zip output/
             echo "Successfully created output_videos.zip"
           else
-            echo "No files found in output/ directory to zip."
+            echo "No clips found in output/ directory to zip."
+            touch output_videos.zip
           fi
 
       - name: Prepare GitHub Pages Site
