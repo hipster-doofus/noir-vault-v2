@@ -81,9 +81,9 @@ WORKSPACE = Path("temp_workspace")
 OUTPUT_DIR = Path("output")
 CATALOG_PATH = Path("catalog.json")
 
-SCENES_PER_MOVIE = int(os.environ.get("SCENES_PER_MOVIE", "10"))
+SCENES_PER_MOVIE = int(os.environ.get("SCENES_PER_MOVIE", "5"))
 MIN_SCENE_SECS = 15
-MAX_SCENE_SECS = 180
+MAX_SCENE_SECS = 90
 
 GENRE_SEARCH_MAP = {
     "Film Noir": "film noir",
@@ -186,7 +186,6 @@ def resolve_archive_mp4(archive_id: str) -> str | None:
 
 
 def discover_movies(num_needed: int) -> list[dict]:
-    # 1. Check for interactive manual mode payload from GitHub Pages
     if MODE == "manual" and SELECTED_MOVIES_JSON and SELECTED_MOVIES_JSON != "[]":
         try:
             items = json.loads(SELECTED_MOVIES_JSON)
@@ -202,14 +201,12 @@ def discover_movies(num_needed: int) -> list[dict]:
         except Exception as e:
             print(f"⚠ Failed to parse MANUAL mode payload: {e}")
 
-    # 2. Check override
     if ARCHIVE_ID_OVERRIDE:
         print(f"🎯 Using archive ID override: {ARCHIVE_ID_OVERRIDE}")
         url = resolve_archive_mp4(ARCHIVE_ID_OVERRIDE)
         if url:
             return [{"title": ARCHIVE_ID_OVERRIDE, "id": ARCHIVE_ID_OVERRIDE, "url": url, "year": None}]
 
-    # 3. Dynamic Search
     candidates = search_archive(
         keyword=SEARCH_KEYWORD,
         genre=SELECTED_GENRE,
@@ -243,10 +240,6 @@ def discover_movies(num_needed: int) -> list[dict]:
 
 
 def stream_sample_segment(stream_url: str, dest_path: Path, duration_mins: int = 15) -> bool:
-    """
-    Streams a fast 15-minute sample segment directly from the remote URL using FFmpeg copy
-    without downloading full GBs of movie files.
-    """
     random_start_sec = random.randint(300, 1800)
     start_time_str = f"{random_start_sec // 3600:02d}:{(random_start_sec % 3600) // 60:02d}:{random_start_sec % 60:02d}"
     print(f"  🌐 Remote Streaming {duration_mins}-min window starting at {start_time_str}...")
@@ -388,10 +381,8 @@ def analyse_scene_ai(title: str, year, scene_num: int, total: int, transcript: s
 
 
 def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None:
-    # 1. Clean repo and tag strings to prevent invalid URL formatting
     repo = (GITHUB_REPOSITORY or "").strip().strip("[]'\"")
     tag = (tag_name or "").strip().strip("[]'\"")
-    
     if not GITHUB_TOKEN or not repo or not tag:
         return None
 
@@ -402,11 +393,9 @@ def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None
     }
 
     try:
-        # 2. Construct clean GitHub REST API endpoint
-        get_rel_url = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
+        get_rel_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){repo}/releases/tags/{tag}"
         res = requests.get(get_rel_url, headers=headers)
         if res.status_code != 200:
-            print(f"    ⚠ Could not find release tag '{tag}': {res.status_code} {res.text}")
             return None
 
         release_info = res.json()
@@ -424,8 +413,6 @@ def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None
             download_url = upload_res.json().get("browser_download_url", "")
             print(f"    ☁ Uploaded to GitHub Release: {file_path.name}")
             return download_url
-        else:
-            print(f"    ⚠ Release asset upload failed ({upload_res.status_code}): {upload_res.text}")
     except Exception as e:
         print(f"    ⚠ Upload asset error: {e}")
     return None
@@ -519,7 +506,6 @@ def process_movie(movie: dict, workspace: Path, output_dir: Path) -> dict | None
             "clip_path": str(clip_path),
         })
 
-    # Clean intermediate segment sample
     if sample_path.exists():
         sample_path.unlink()
 
