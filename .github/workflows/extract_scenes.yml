@@ -87,8 +87,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Set Release Tag & Metadata
+        run: |
+          TIMESTAMP=$(date +'%Y-%m-%d-%H%M')
+          RELEASE_TAG="v2-run-${TIMESTAMP}"
+          echo "TIMESTAMP=${TIMESTAMP}" >> $GITHUB_ENV
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+          echo "MOVIE_COUNT=${{ github.event.inputs.num_movies || '3' }}" >> $GITHUB_ENV
+          echo "RUN_LABEL=${{ github.event.inputs.genre || 'Film Noir' }}" >> $GITHUB_ENV
+
+      - name: Create Base GitHub Release (For In-flight File Uploads)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "Noir Vault v2 | ${{ env.RUN_LABEL }} | ${{ env.MOVIE_COUNT }} Films (${{ env.TIMESTAMP }})"
+          body: |
+            ## Noir Vault v2 Run Report
+            - **Genre:** ${{ github.event.inputs.genre || 'Film Noir' }}
+            - **Era:** ${{ github.event.inputs.date_range || 'All Eras' }}
+            - **Keyword:** ${{ github.event.inputs.search_keyword || '(none)' }}
+            - **Films requested:** ${{ env.MOVIE_COUNT }}
+            - **Status:** Processing in progress…
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run Search, Extract & Index Pipeline
         env:
+          GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG:         ${{ env.RELEASE_TAG }}
           SUPABASE_URL:        ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:        ${{ secrets.SUPABASE_KEY }}
           GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
@@ -102,13 +128,8 @@ jobs:
         run: |
           python pipeline.py
 
-      - name: Set Timestamp & Labels
-        run: |
-          echo "TIMESTAMP=$(date +'%Y-%m-%d-%H%M')" >> $GITHUB_ENV
-          echo "MOVIE_COUNT=${{ github.event.inputs.num_movies || '3' }}" >> $GITHUB_ENV
-          echo "RUN_LABEL=${{ github.event.inputs.genre || 'Film Noir' }}" >> $GITHUB_ENV
-
-      - name: Zip Output Clips
+      - name: Zip Remaining Output Clips (Backup Strategy)
+        if: always()
         run: |
           if [ -d "output" ]; then
             zip -r output_videos.zip output/
@@ -117,11 +138,11 @@ jobs:
           fi
 
       - name: Prepare GitHub Pages Site
+        if: always()
         run: |
           mkdir -p _site
-          cp index.html _site/
-          # catalog.json is written to repo root by pipeline.py
-          cp catalog.json _site/catalog.json
+          cp index.html _site/ 2>/dev/null || true
+          cp catalog.json _site/catalog.json 2>/dev/null || true
           cp schema.sql _site/ 2>/dev/null || true
 
       - name: Upload Pages Artifact
@@ -129,32 +150,17 @@ jobs:
         with:
           path: _site
 
-      - name: Upload MP4 Archive
+      - name: Upload MP4 Backup Archive
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: movie-scenes-mp4
+          name: movie-scenes-mp4-backup
           path: output_videos.zip
           if-no-files-found: warn
 
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v2-run-${{ env.TIMESTAMP }}
-          name: "Noir Vault v2 | ${{ env.RUN_LABEL }} | ${{ env.MOVIE_COUNT }} Films (${{ env.TIMESTAMP }})"
-          body: |
-            ## Noir Vault v2 Run Report
-            - **Genre:** ${{ github.event.inputs.genre || 'Film Noir' }}
-            - **Era:** ${{ github.event.inputs.date_range || 'All Eras' }}
-            - **Keyword:** ${{ github.event.inputs.search_keyword || '(none)' }}
-            - **Films processed:** ${{ env.MOVIE_COUNT }}
-            - **Public domain only:** ${{ github.event.inputs.public_domain_only || 'true' }}
-          files: |
-            output/**/*.mp4
-            catalog.json
-        continue-on-error: true
-
   deploy-pages:
     needs: search-extract-publish
+    if: always()
     runs-on: ubuntu-latest
     environment:
       name: github-pages
