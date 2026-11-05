@@ -511,38 +511,48 @@ def analyse_scene_ai(
         total_scenes=total,
         transcript=transcript[:500],
     )
-    try:
-        # Check if using new google.genai Client format vs legacy google.generativeai
-        if hasattr(genai, "Client"):
-            client = genai.Client(api_key=GEMINI_API_KEY)
-            resp = client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=prompt,
-            )
-            raw_text = resp.text
-        else:
-            genai.configure(api_key=GEMINI_API_KEY)
-            model_obj = genai.GenerativeModel("gemini-1.5-flash")
-            resp = model_obj.generate_content(prompt)
-            raw_text = resp.text
+    
+    # Try updated model identifier strings for resilience
+    candidate_models = ["gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro"]
+    
+    for model_name in candidate_models:
+        try:
+            if hasattr(genai, "Client"):
+                client = genai.Client(api_key=GEMINI_API_KEY)
+                resp = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                raw_text = resp.text
+            else:
+                genai.configure(api_key=GEMINI_API_KEY)
+                model_obj = genai.GenerativeModel(model_name)
+                resp = model_obj.generate_content(prompt)
+                raw_text = resp.text
 
-        raw = (
-            raw_text.strip()
-            .lstrip("```json")
-            .lstrip("```")
-            .rstrip("```")
-            .strip()
-        )
-        parsed = json.loads(raw)
-        return {
-            "description": str(parsed.get("description", default["description"])),
-            "synopsis": str(parsed.get("synopsis", default["synopsis"])),
-            "mood": str(parsed.get("mood", default["mood"])),
-            "noir_tropes": list(parsed.get("noir_tropes", default["noir_tropes"])),
-        }
-    except Exception as e:
-        print(f"    ⚠ Gemini error: {e}")
-        return default
+            raw = (
+                raw_text.strip()
+                .lstrip("```json")
+                .lstrip("```")
+                .rstrip("```")
+                .strip()
+            )
+            parsed = json.loads(raw)
+            return {
+                "description": str(parsed.get("description", default["description"])),
+                "synopsis": str(parsed.get("synopsis", default["synopsis"])),
+                "mood": str(parsed.get("mood", default["mood"])),
+                "noir_tropes": list(parsed.get("noir_tropes", default["noir_tropes"])),
+            }
+        except Exception as e:
+            # If model name failed with 404, loop to try the next model string
+            if "404" in str(e) or "NOT_FOUND" in str(e):
+                continue
+            print(f"    ⚠ Gemini error ({model_name}): {e}")
+            return default
+
+    print("    ⚠ All Gemini models returned 404 – using fallback default metadata.")
+    return default
 
 
 def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None:
