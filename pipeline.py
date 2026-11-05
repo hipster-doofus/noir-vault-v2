@@ -388,8 +388,10 @@ def analyse_scene_ai(title: str, year, scene_num: int, total: int, transcript: s
 
 
 def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None:
-    repo = GITHUB_REPOSITORY
-    tag = tag_name
+    # 1. Clean repo and tag strings to prevent invalid URL formatting
+    repo = (GITHUB_REPOSITORY or "").strip().strip("[]'\"")
+    tag = (tag_name or "").strip().strip("[]'\"")
+    
     if not GITHUB_TOKEN or not repo or not tag:
         return None
 
@@ -400,9 +402,11 @@ def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None
     }
 
     try:
-        get_rel_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){repo}/releases/tags/{tag}"
+        # 2. Construct clean GitHub REST API endpoint
+        get_rel_url = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
         res = requests.get(get_rel_url, headers=headers)
         if res.status_code != 200:
+            print(f"    ⚠ Could not find release tag '{tag}': {res.status_code} {res.text}")
             return None
 
         release_info = res.json()
@@ -420,6 +424,8 @@ def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None
             download_url = upload_res.json().get("browser_download_url", "")
             print(f"    ☁ Uploaded to GitHub Release: {file_path.name}")
             return download_url
+        else:
+            print(f"    ⚠ Release asset upload failed ({upload_res.status_code}): {upload_res.text}")
     except Exception as e:
         print(f"    ⚠ Upload asset error: {e}")
     return None
