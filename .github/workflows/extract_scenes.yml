@@ -118,7 +118,13 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
-
+          
+      - name: Upload MP4 Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: movie-scenes-mp4
+          path: output_videos.zip
+    
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -132,8 +138,8 @@ jobs:
             - **Films processed:** ${{ env.MOVIE_COUNT }}
             - **Public domain only:** ${{ github.event.inputs.public_domain_only || 'true' }}
           files: |
-            output/**/*.mp4
-            catalog.json
+              output/**/*.mp4
+              catalog.json
         continue-on-error: true
 
   deploy-pages:
