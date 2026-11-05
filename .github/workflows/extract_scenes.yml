@@ -131,10 +131,11 @@ jobs:
       - name: Zip Remaining Output Clips (Backup Strategy)
         if: always()
         run: |
-          if [ -d "output" ]; then
-            zip -r output_videos.zip output/
+          if [ -d "output" ] && [ "$(ls -A output 2>/dev/null)" ]; then
+            cd output && zip -r ../output_videos.zip . && cd ..
+            echo "Successfully created output_videos.zip"
           else
-            echo "No output directory found to zip."
+            echo "No files found in output/ directory to zip."
           fi
 
       - name: Prepare GitHub Pages Site
