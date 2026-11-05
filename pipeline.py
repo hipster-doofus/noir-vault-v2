@@ -19,6 +19,7 @@ import os, sys, gc, re, json, random, time, shutil, tempfile, hashlib, subproces
 import urllib.request, urllib.parse
 from pathlib import Path
 from datetime import datetime
+import zipfile
 
 # ── optional heavy deps (fail gracefully) ──────────────────────────────────
 try:
@@ -53,16 +54,27 @@ try:
 except ImportError:
     WHISPER_OK = False
 
+#try:
+#    import google.generativeai as genai
+#    GEMINI_OK = True
+#except ImportError:
+#    try:
+#        from google import genai as genai_new
+#        GEMINI_OK = True
+ #   except ImportError:
+#        GEMINI_OK = False
 try:
     import google.generativeai as genai
     GEMINI_OK = True
 except ImportError:
     try:
-        from google import genai as genai_new
+        from google import genai as genai_module
+        genai = genai_module  # Bind to genai so the rest of the script works
         GEMINI_OK = True
     except ImportError:
+        genai = None
         GEMINI_OK = False
-
+      
 # ── env / config ───────────────────────────────────────────────────────────
 SEARCH_KEYWORD     = os.environ.get("SEARCH_KEYWORD", "").strip()
 SELECTED_GENRE     = os.environ.get("SELECTED_GENRE", "All Genres").strip()
@@ -748,6 +760,29 @@ def main():
         print("❌ No movies were successfully processed. Exiting with error.")
         sys.exit(1)
 
+
+def zip_mp4_outputs(output_dir="output", zip_filename="output_videos.zip"):
+    output_path = Path(output_dir)
+    if not output_path.exists():
+        print(f"Output directory '{output_dir}' does not exist. Skipping zip.")
+        return
+
+    # Find all .mp4 files inside the output directory (including subdirectories if any)
+    mp4_files = list(output_path.rglob("*.mp4"))
+    
+    if not mp4_files:
+        print("No .mp4 files found to zip.")
+        return
+
+    with zipfile.ZipFile(zip_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for file in mp4_files:
+            # Preserve relative path structure inside the zip, or use file.name to flatten them
+            zipf.write(file, arcname=file.relative_to(output_path))
+            
+    print(f"Successfully zipped {len(mp4_files)} .mp4 files into '{zip_filename}'")
+
+# Call this function at the very end of your pipeline execution
+zip_mp4_outputs()
 
 if __name__ == "__main__":
     main()
