@@ -80,7 +80,7 @@ jobs:
       - name: Install System Dependencies (FFmpeg)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg zip
 
       - name: Install Python Dependencies
         run: |
@@ -89,15 +89,15 @@ jobs:
 
       - name: Run Search, Extract & Index Pipeline
         env:
-          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
-          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
-          HF_TOKEN:           ${{ secrets.HF_TOKEN }}
-          SEARCH_KEYWORD:     ${{ github.event.inputs.search_keyword }}
-          SELECTED_GENRE:     ${{ github.event.inputs.genre || 'Film Noir' }}
-          DATE_RANGE:         ${{ github.event.inputs.date_range || '1940-1959 (Classic Noir Era)' }}
-          PUBLIC_DOMAIN_ONLY: ${{ github.event.inputs.public_domain_only || 'true' }}
-          NUM_MOVIES:         ${{ github.event.inputs.num_movies || '3' }}
+          SUPABASE_URL:        ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:        ${{ secrets.SUPABASE_KEY }}
+          GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
+          HF_TOKEN:            ${{ secrets.HF_TOKEN }}
+          SEARCH_KEYWORD:      ${{ github.event.inputs.search_keyword }}
+          SELECTED_GENRE:      ${{ github.event.inputs.genre || 'Film Noir' }}
+          DATE_RANGE:          ${{ github.event.inputs.date_range || '1940-1959 (Classic Noir Era)' }}
+          PUBLIC_DOMAIN_ONLY:  ${{ github.event.inputs.public_domain_only || 'true' }}
+          NUM_MOVIES:          ${{ github.event.inputs.num_movies || '3' }}
           ARCHIVE_ID_OVERRIDE: ${{ github.event.inputs.specific_archive_id }}
         run: |
           python pipeline.py
@@ -106,6 +106,15 @@ jobs:
         run: |
           echo "TIMESTAMP=$(date +'%Y-%m-%d-%H%M')" >> $GITHUB_ENV
           echo "MOVIE_COUNT=${{ github.event.inputs.num_movies || '3' }}" >> $GITHUB_ENV
+          echo "RUN_LABEL=${{ github.event.inputs.genre || 'Film Noir' }}" >> $GITHUB_ENV
+
+      - name: Zip Output Clips
+        run: |
+          if [ -d "output" ]; then
+            zip -r output_videos.zip output/
+          else
+            echo "No output directory found to zip."
+          fi
 
       - name: Prepare GitHub Pages Site
         run: |
@@ -119,13 +128,14 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
-          
+
       - name: Upload MP4 Archive
         uses: actions/upload-artifact@v4
         with:
           name: movie-scenes-mp4
           path: output_videos.zip
-    
+          if-no-files-found: warn
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -139,8 +149,8 @@ jobs:
             - **Films processed:** ${{ env.MOVIE_COUNT }}
             - **Public domain only:** ${{ github.event.inputs.public_domain_only || 'true' }}
           files: |
-              output/**/*.mp4
-              catalog.json
+            output/**/*.mp4
+            catalog.json
         continue-on-error: true
 
   deploy-pages:
