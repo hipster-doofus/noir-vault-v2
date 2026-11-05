@@ -92,6 +92,7 @@
     }
 
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
 
     button.btn-primary {
       background-color: var(--accent);
@@ -120,7 +121,6 @@
     }
 
     .scene-card img { width: 100%; height: 160px; object-fit: cover; }
-
     .scene-info { padding: 1rem; }
     .tag { display: inline-block; background: #2a2e37; font-size: 0.75rem; padding: 2px 6px; border-radius: 3px; margin-right: 4px; }
 
@@ -155,13 +155,48 @@
   </header>
 
   <main>
-    <!-- TAB 1: CLIP VAULT VIEWER -->
+    <!-- TAB 1: CLIP VAULT VIEWER (WITH CATALOG FILTERS) -->
     <div id="viewer-tab" class="tab-content active">
       <h2>Extracted Noir Clips Catalog</h2>
+      
+      <div class="panel-card">
+        <div class="grid-3">
+          <div class="form-group">
+            <label>Filter Keyword</label>
+            <input type="text" id="viewer-search" placeholder="Search title, scene or trope..." oninput="filterCatalog()">
+          </div>
+          <div class="form-group">
+            <label>Genre / Category</label>
+            <select id="viewer-genre" onchange="filterCatalog()">
+              <option value="All Genres">All Genres</option>
+              <option value="Film Noir">Film Noir</option>
+              <option value="Crime & Gangster">Crime & Gangster</option>
+              <option value="Mystery & Suspense">Mystery & Suspense</option>
+              <option value="Psychological Thriller">Psychological Thriller</option>
+              <option value="Western Noir">Western Noir</option>
+              <option value="Gothic Horror">Gothic Horror</option>
+              <option value="Sci-Fi B-Movie">Sci-Fi B-Movie</option>
+              <option value="War & Espionage">War & Espionage</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Release Era</label>
+            <select id="viewer-era" onchange="filterCatalog()">
+              <option value="All Eras">All Eras</option>
+              <option value="1940-1959">1940-1959 (Classic Noir Era)</option>
+              <option value="1940-1949">1940-1949 (1940s Golden Age)</option>
+              <option value="1950-1959">1950-1959 (1950s Late Noir)</option>
+              <option value="1930-1939">1930-1939 (Pre-Code Era)</option>
+              <option value="1920-1929">1920-1929 (Silent Era)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div id="catalog-container" class="movie-grid">Loading catalog clips…</div>
     </div>
 
-    <!-- TAB 2: INTERACTIVE CONTROL PANEL -->
+    <!-- TAB 2: INTERACTIVE CONTROL PANEL (FULL PARITY FILTERS) -->
     <div id="generator-tab" class="tab-content">
       <h2>Pipeline Launch Dashboard</h2>
       
@@ -178,7 +213,7 @@
         <div class="grid-2">
           <div class="form-group">
             <label>Search Keyword</label>
-            <input type="text" id="param-keyword" placeholder="e.g. detective, murder, heist">
+            <input type="text" id="param-keyword" placeholder="e.g. detective, murder, heist, femme fatale">
           </div>
           <div class="form-group">
             <label>Genre / Category</label>
@@ -186,6 +221,11 @@
               <option value="Film Noir">Film Noir</option>
               <option value="Crime & Gangster">Crime & Gangster</option>
               <option value="Mystery & Suspense">Mystery & Suspense</option>
+              <option value="Psychological Thriller">Psychological Thriller</option>
+              <option value="Western Noir">Western Noir</option>
+              <option value="Gothic Horror">Gothic Horror</option>
+              <option value="Sci-Fi B-Movie">Sci-Fi B-Movie</option>
+              <option value="War & Espionage">War & Espionage</option>
               <option value="All Genres">All Genres</option>
             </select>
           </div>
@@ -193,8 +233,29 @@
 
         <div class="grid-2">
           <div class="form-group">
-            <label>Scenes per Movie</label>
-            <input type="number" id="param-scenes" value="5" min="1" max="15">
+            <label>Release Era / Date Range</label>
+            <select id="param-era">
+              <option value="1940-1959 (Classic Noir Era)">1940-1959 (Classic Noir Era)</option>
+              <option value="1940-1949 (1940s Golden Age)">1940-1949 (1940s Golden Age)</option>
+              <option value="1950-1959 (1950s Late Noir & Cold War)">1950-1959 (1950s Late Noir & Cold War)</option>
+              <option value="1930-1939 (Pre-Code Era)">1930-1939 (Pre-Code Era)</option>
+              <option value="1920-1929 (Silent Era)">1920-1929 (Silent Era)</option>
+              <option value="All Eras">All Eras</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Public Domain Only</label>
+            <select id="param-pd">
+              <option value="true">true (Internet Archive Verified)</option>
+              <option value="false">false</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Scenes per Movie (1-10)</label>
+            <input type="number" id="param-scenes" value="5" min="1" max="10">
           </div>
           <div class="form-group">
             <label>GitHub Personal Access Token (PAT)</label>
@@ -225,6 +286,8 @@
   </div>
 
   <script>
+    let globalCatalogData = null;
+
     // Tab Switching
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -248,29 +311,56 @@
     async function loadCatalog() {
       try {
         const res = await fetch('catalog.json');
-        const data = await res.json();
-        const container = document.getElementById('catalog-container');
-        container.innerHTML = '';
-
-        (data.movies || []).forEach(movie => {
-          (movie.scenes || []).forEach(scene => {
-            const card = document.createElement('div');
-            card.className = 'scene-card';
-            card.innerHTML = `
-              <img src="${scene.thumbnail_url || 'https://images.unsplash.com/photo-1509023464722-18d996393ca8?w=640'}" alt="Scene">
-              <div class="scene-info">
-                <h4>${movie.title} (${movie.year || '?'})</h4>
-                <p><strong>Scene ${scene.scene_number}:</strong> ${scene.synopsis || scene.description}</p>
-                <div>${(scene.noir_tropes || []).map(t => `<span class="tag">${t}</span>`).join('')}</div>
-                <button class="btn-primary" style="margin-top:0.8rem; width:100%;" onclick="openPlayer('${scene.download_url}', '${movie.title} - Scene ${scene.scene_number}', '${scene.description}')">▶ Watch MP4</button>
-              </div>
-            `;
-            container.appendChild(card);
-          });
-        });
+        globalCatalogData = await res.json();
+        renderCatalog(globalCatalogData.movies || []);
       } catch (e) {
         document.getElementById('catalog-container').innerHTML = '<p>No catalog scenes found yet. Run a pipeline to generate clips!</p>';
       }
+    }
+
+    function renderCatalog(movies) {
+      const container = document.getElementById('catalog-container');
+      container.innerHTML = '';
+
+      movies.forEach(movie => {
+        (movie.scenes || []).forEach(scene => {
+          const card = document.createElement('div');
+          card.className = 'scene-card';
+          card.innerHTML = `
+            <img src="${scene.thumbnail_url || 'https://images.unsplash.com/photo-1509023464722-18d996393ca8?w=640'}" alt="Scene">
+            <div class="scene-info">
+              <h4>${movie.title} (${movie.year || '?'})</h4>
+              <p><strong>Scene ${scene.scene_number}:</strong> ${scene.synopsis || scene.description}</p>
+              <div>${(scene.noir_tropes || []).map(t => `<span class="tag">${t}</span>`).join('')}</div>
+              <button class="btn-primary" style="margin-top:0.8rem; width:100%;" onclick="openPlayer('${scene.download_url}', '${movie.title} - Scene ${scene.scene_number}', '${scene.description}')">▶ Watch MP4</button>
+            </div>
+          `;
+          container.appendChild(card);
+        });
+      });
+    }
+
+    function filterCatalog() {
+      if (!globalCatalogData || !globalCatalogData.movies) return;
+
+      const kw = document.getElementById('viewer-search').value.toLowerCase();
+      const genre = document.getElementById('viewer-genre').value;
+      const era = document.getElementById('viewer-era').value;
+
+      const filtered = globalCatalogData.movies.filter(movie => {
+        const matchGenre = (genre === 'All Genres' || movie.genre === genre);
+        const matchKw = !kw || movie.title.toLowerCase().includes(kw) || JSON.stringify(movie.scenes).toLowerCase().includes(kw);
+        
+        let matchEra = true;
+        if (era !== 'All Eras' && movie.year) {
+          const [start, end] = era.split('-').map(Number);
+          matchEra = (movie.year >= start && movie.year <= end);
+        }
+
+        return matchGenre && matchKw && matchEra;
+      });
+
+      renderCatalog(filtered);
     }
 
     // Video Player Modal
@@ -327,9 +417,11 @@
         event_type: 'run-custom-pipeline',
         client_payload: {
           mode: mode,
-          keyword: document.getElementById('param-keyword').value,
+          search_keyword: document.getElementById('param-keyword').value,
           genre: document.getElementById('param-genre').value,
-          scenes_per_movie: document.getElementById('param-scenes').value,
+          date_range: document.getElementById('param-era').value,
+          public_domain_only: document.getElementById('param-pd').value,
+          num_movies: document.getElementById('param-scenes').value,
           movies: selectedMovies
         }
       };
