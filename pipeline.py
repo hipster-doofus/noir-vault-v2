@@ -512,11 +512,22 @@ def analyse_scene_ai(
         transcript=transcript[:500],
     )
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model_obj = genai.GenerativeModel("gemini-1.5-flash")
-        resp = model_obj.generate_content(prompt)
+        # Check if using new google.genai Client format vs legacy google.generativeai
+        if hasattr(genai, "Client"):
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            resp = client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=prompt,
+            )
+            raw_text = resp.text
+        else:
+            genai.configure(api_key=GEMINI_API_KEY)
+            model_obj = genai.GenerativeModel("gemini-1.5-flash")
+            resp = model_obj.generate_content(prompt)
+            raw_text = resp.text
+
         raw = (
-            resp.text.strip()
+            raw_text.strip()
             .lstrip("```json")
             .lstrip("```")
             .rstrip("```")
@@ -524,14 +535,10 @@ def analyse_scene_ai(
         )
         parsed = json.loads(raw)
         return {
-            "description": str(
-                parsed.get("description", default["description"])
-            ),
+            "description": str(parsed.get("description", default["description"])),
             "synopsis": str(parsed.get("synopsis", default["synopsis"])),
             "mood": str(parsed.get("mood", default["mood"])),
-            "noir_tropes": list(
-                parsed.get("noir_tropes", default["noir_tropes"])
-            ),
+            "noir_tropes": list(parsed.get("noir_tropes", default["noir_tropes"])),
         }
     except Exception as e:
         print(f"    ⚠ Gemini error: {e}")
