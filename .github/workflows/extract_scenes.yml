@@ -80,71 +80,87 @@ jobs:
       - name: Install System Dependencies (FFmpeg)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg zip
 
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Search, Extract & Index Pipeline
-        env:
-          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
-          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
-          HF_TOKEN:           ${{ secrets.HF_TOKEN }}
-          SEARCH_KEYWORD:     ${{ github.event.inputs.search_keyword }}
-          SELECTED_GENRE:     ${{ github.event.inputs.genre || 'Film Noir' }}
-          DATE_RANGE:         ${{ github.event.inputs.date_range || '1940-1959 (Classic Noir Era)' }}
-          PUBLIC_DOMAIN_ONLY: ${{ github.event.inputs.public_domain_only || 'true' }}
-          NUM_MOVIES:         ${{ github.event.inputs.num_movies || '3' }}
-          ARCHIVE_ID_OVERRIDE: ${{ github.event.inputs.specific_archive_id }}
+      - name: Set Release Tag & Metadata
         run: |
-          python pipeline.py
-
-      - name: Set Timestamp & Labels
-        run: |
-          echo "TIMESTAMP=$(date +'%Y-%m-%d-%H%M')" >> $GITHUB_ENV
+          TIMESTAMP=$(date +'%Y-%m-%d-%H%M')
+          RELEASE_TAG="v2-run-${TIMESTAMP}"
+          echo "TIMESTAMP=${TIMESTAMP}" >> $GITHUB_ENV
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
           echo "MOVIE_COUNT=${{ github.event.inputs.num_movies || '3' }}" >> $GITHUB_ENV
+          echo "RUN_LABEL=${{ github.event.inputs.genre || 'Film Noir' }}" >> $GITHUB_ENV
 
-      - name: Prepare GitHub Pages Site
-        run: |
-          mkdir -p _site
-          cp index.html _site/
-          # catalog.json is written to repo root by pipeline.py
-          cp catalog.json _site/catalog.json
-          cp schema.sql _site/ 2>/dev/null || true
-
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-          
-      - name: Upload MP4 Archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: movie-scenes-mp4
-          path: output_videos.zip
-    
-      - name: Publish GitHub Release
+      - name: Create Base GitHub Release (For In-flight File Uploads)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2-run-${{ env.TIMESTAMP }}
+          tag_name: ${{ env.RELEASE_TAG }}
           name: "Noir Vault v2 | ${{ env.RUN_LABEL }} | ${{ env.MOVIE_COUNT }} Films (${{ env.TIMESTAMP }})"
           body: |
             ## Noir Vault v2 Run Report
             - **Genre:** ${{ github.event.inputs.genre || 'Film Noir' }}
             - **Era:** ${{ github.event.inputs.date_range || 'All Eras' }}
             - **Keyword:** ${{ github.event.inputs.search_keyword || '(none)' }}
-            - **Films processed:** ${{ env.MOVIE_COUNT }}
-            - **Public domain only:** ${{ github.event.inputs.public_domain_only || 'true' }}
-          files: |
-              output/**/*.mp4
-              catalog.json
-        continue-on-error: true
+            - **Films requested:** ${{ env.MOVIE_COUNT }}
+            - **Status:** Processing in progress…
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Search, Extract & Index Pipeline
+        env:
+          GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG:         ${{ env.RELEASE_TAG }}
+          SUPABASE_URL:        ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:        ${{ secrets.SUPABASE_KEY }}
+          GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
+          HF_TOKEN:            ${{ secrets.HF_TOKEN }}
+          SEARCH_KEYWORD:      ${{ github.event.inputs.search_keyword }}
+          SELECTED_GENRE:      ${{ github.event.inputs.genre || 'Film Noir' }}
+          DATE_RANGE:          ${{ github.event.inputs.date_range || '1940-1959 (Classic Noir Era)' }}
+          PUBLIC_DOMAIN_ONLY:  ${{ github.event.inputs.public_domain_only || 'true' }}
+          NUM_MOVIES:          ${{ github.event.inputs.num_movies || '3' }}
+          ARCHIVE_ID_OVERRIDE: ${{ github.event.inputs.specific_archive_id }}
+        run: |
+          python pipeline.py
+
+      - name: Zip Remaining Output Clips (Backup Strategy)
+        if: always()
+        run: |
+          if [ -d "output" ]; then
+            zip -r output_videos.zip output/
+          else
+            echo "No output directory found to zip."
+          fi
+
+      - name: Prepare GitHub Pages Site
+        if: always()
+        run: |
+          mkdir -p _site
+          cp index.html _site/ 2>/dev/null || true
+          cp catalog.json _site/catalog.json 2>/dev/null || true
+          cp schema.sql _site/ 2>/dev/null || true
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Upload MP4 Backup Archive
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: movie-scenes-mp4-backup
+          path: output_videos.zip
+          if-no-files-found: warn
 
   deploy-pages:
     needs: search-extract-publish
+    if: always()
     runs-on: ubuntu-latest
     environment:
       name: github-pages
