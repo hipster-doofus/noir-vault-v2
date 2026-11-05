@@ -12,6 +12,9 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY")  # e.g., "user/repo"
 RELEASE_TAG = os.getenv("RELEASE_TAG")
 
+WORKSPACE = Path("temp_workspace")
+OUTPUT_DIR = Path("output")
+
 
 def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None:
     """
@@ -29,7 +32,6 @@ def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None
     }
 
     try:
-        # 1. Get the release ID for tag
         get_rel_url = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/tags/{tag_name}"
         res = requests.get(get_rel_url, headers=headers)
         if res.status_code != 200:
@@ -37,10 +39,9 @@ def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None
             return None
 
         release_info = res.json()
-        upload_url_template = release_info["upload_url"]  # Format: url{?name,label}
+        upload_url_template = release_info["upload_url"]
         upload_url = upload_url_template.split("{")[0] + f"?name={file_path.name}"
 
-        # 2. Upload file binary
         with open(file_path, "rb") as f:
             file_data = f.read()
 
@@ -178,3 +179,9 @@ def process_movie(movie: dict, workspace: Path, output_dir: Path) -> dict | None
         print(f"  ⚠  Supabase upload skipped or failed: {e}")
 
     return catalog_entry
+
+
+def main():
+    WORKSPACE.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # ... rest of your existing main pipeline execution logic ...
