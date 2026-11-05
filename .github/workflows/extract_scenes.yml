@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       search_keyword:
-        description: 'Keyword Search (e.g. detective, heist, murder, femme fatale, boxer, gangster)'
+        description: 'Keyword Search (e.g. detective, heist, murder, femme fatale)'
         required: false
         default: ''
         type: string
@@ -36,7 +36,7 @@ on:
           - '1920-1929 (Silent Era)'
           - 'All Eras'
       public_domain_only:
-        description: 'Verified Public Domain Only (hosted on Internet Archive)'
+        description: 'Verified Public Domain Only'
         required: true
         default: 'true'
         type: choice
@@ -44,15 +44,17 @@ on:
           - 'true'
           - 'false'
       num_movies:
-        description: 'Number of movies to process per run (1–10)'
+        description: 'Number of movies to process (1–10)'
         required: false
         default: '3'
         type: string
       specific_archive_id:
-        description: 'Optional: Force a specific Internet Archive ID (overrides all search filters)'
+        description: 'Optional: Force a specific Internet Archive ID'
         required: false
         default: ''
         type: string
+  repository_dispatch:
+    types: [run-custom-pipeline]
 
 permissions:
   contents: write
@@ -77,10 +79,12 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install System Dependencies (FFmpeg)
+      - name: Install System Dependencies (FFmpeg & yt-dlp)
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg zip
+          sudo wget [https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp) -O /usr/local/bin/yt-dlp
+          sudo chmod a+rx /usr/local/bin/yt-dlp
 
       - name: Install Python Dependencies
         run: |
@@ -93,42 +97,43 @@ jobs:
           RELEASE_TAG="v2-run-${TIMESTAMP}"
           echo "TIMESTAMP=${TIMESTAMP}" >> $GITHUB_ENV
           echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
-          echo "MOVIE_COUNT=${{ github.event.inputs.num_movies || '3' }}" >> $GITHUB_ENV
-          echo "RUN_LABEL=${{ github.event.inputs.genre || 'Film Noir' }}" >> $GITHUB_ENV
+          echo "MOVIE_COUNT=${{ github.event.inputs.num_movies || github.event.client_payload.num_movies || '3' }}" >> $GITHUB_ENV
+          echo "RUN_LABEL=${{ github.event.inputs.genre || github.event.client_payload.genre || 'Film Noir' }}" >> $GITHUB_ENV
 
-      - name: Create Base GitHub Release (For In-flight File Uploads)
+      - name: Create Base GitHub Release (For Clip Asset Uploads)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "Noir Vault v2 | ${{ env.RUN_LABEL }} | ${{ env.MOVIE_COUNT }} Films (${{ env.TIMESTAMP }})"
           body: |
-            ## Noir Vault v2 Run Report
-            - **Genre:** ${{ github.event.inputs.genre || 'Film Noir' }}
-            - **Era:** ${{ github.event.inputs.date_range || 'All Eras' }}
-            - **Keyword:** ${{ github.event.inputs.search_keyword || '(none)' }}
+            ## Noir Vault v2 Streamed Extraction Report
+            - **Genre:** ${{ github.event.inputs.genre || github.event.client_payload.genre || 'Film Noir' }}
+            - **Era:** ${{ github.event.inputs.date_range || github.event.client_payload.date_range || 'All Eras' }}
+            - **Keyword:** ${{ github.event.inputs.search_keyword || github.event.client_payload.search_keyword || '(none)' }}
             - **Films requested:** ${{ env.MOVIE_COUNT }}
-            - **Status:** Processing in progress…
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run Search, Extract & Index Pipeline
+      - name: Run Search, Stream & Index Pipeline
         env:
-          GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG:         ${{ env.RELEASE_TAG }}
-          SUPABASE_URL:        ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY:        ${{ secrets.SUPABASE_KEY }}
-          GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
-          HF_TOKEN:            ${{ secrets.HF_TOKEN }}
-          SEARCH_KEYWORD:      ${{ github.event.inputs.search_keyword }}
-          SELECTED_GENRE:      ${{ github.event.inputs.genre || 'Film Noir' }}
-          DATE_RANGE:          ${{ github.event.inputs.date_range || '1940-1959 (Classic Noir Era)' }}
-          PUBLIC_DOMAIN_ONLY:  ${{ github.event.inputs.public_domain_only || 'true' }}
-          NUM_MOVIES:          ${{ github.event.inputs.num_movies || '3' }}
-          ARCHIVE_ID_OVERRIDE: ${{ github.event.inputs.specific_archive_id }}
+          GITHUB_TOKEN:         ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG:          ${{ env.RELEASE_TAG }}
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:         ${{ secrets.SUPABASE_KEY }}
+          GEMINI_API_KEY:       ${{ secrets.GEMINI_API_KEY }}
+          MODE:                 ${{ github.event.client_payload.mode || 'auto' }}
+          SELECTED_MOVIES_JSON: ${{ toJson(github.event.client_payload.movies) }}
+          SEARCH_KEYWORD:       ${{ github.event.inputs.search_keyword || github.event.client_payload.search_keyword }}
+          SELECTED_GENRE:       ${{ github.event.inputs.genre || github.event.client_payload.genre || 'Film Noir' }}
+          DATE_RANGE:           ${{ github.event.inputs.date_range || github.event.client_payload.date_range || '1940-1959 (Classic Noir Era)' }}
+          PUBLIC_DOMAIN_ONLY:   ${{ github.event.inputs.public_domain_only || github.event.client_payload.public_domain_only || 'true' }}
+          NUM_MOVIES:           ${{ github.event.inputs.num_movies || github.event.client_payload.num_movies || '3' }}
+          SCENES_PER_MOVIE:     ${{ github.event.client_payload.scenes_per_movie || '5' }}
+          ARCHIVE_ID_OVERRIDE:  ${{ github.event.inputs.specific_archive_id }}
         run: |
           python pipeline.py
 
-      - name: Zip Remaining Output Clips (Backup Strategy)
+      - name: Zip Output Clips (Backup Strategy)
         if: always()
         run: |
           if [ -d "output" ] && [ "$(ls -A output 2>/dev/null)" ]; then
@@ -151,7 +156,7 @@ jobs:
         with:
           path: _site
 
-      - name: Upload MP4 Backup Archive
+      - name: Upload Backup Archive
         if: always()
         uses: actions/upload-artifact@v4
         with:
