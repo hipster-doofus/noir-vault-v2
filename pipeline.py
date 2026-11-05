@@ -83,7 +83,7 @@ CATALOG_PATH = Path("catalog.json")
 
 SCENES_PER_MOVIE = int(os.environ.get("SCENES_PER_MOVIE", "5"))
 MIN_SCENE_SECS = 15
-MAX_SCENE_SECS = 90
+MAX_SCENE_SECS = 180
 
 GENRE_SEARCH_MAP = {
     "Film Noir": "film noir",
