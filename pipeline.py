@@ -781,8 +781,9 @@ def zip_mp4_outputs(output_dir="output", zip_filename="output_videos.zip"):
             
     print(f"Successfully zipped {len(mp4_files)} .mp4 files into '{zip_filename}'")
 
-# Call this function at the very end of your pipeline execution
-zip_mp4_outputs()
+
 
 if __name__ == "__main__":
     main()
+    # Call this function at the very end of your pipeline execution
+    zip_mp4_outputs()
