@@ -539,10 +539,12 @@ def analyse_scene_ai(
 
 
 def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None:
-    if not GITHUB_TOKEN or not GITHUB_REPOSITORY or not tag_name:
-        print(
-            "  ℹ GitHub Release upload skipped (missing GITHUB_TOKEN/RELEASE_TAG)"
-        )
+    # Clean env vars to prevent invalid URL formatting
+    repo = (GITHUB_REPOSITORY or "").strip().strip("[]'\"")
+    tag = (tag_name or "").strip().strip("[]'\"")
+    
+    if not GITHUB_TOKEN or not repo or not tag:
+        print("  ℹ  GitHub Release upload skipped (missing GITHUB_TOKEN/RELEASE_TAG)")
         return None
 
     headers = {
@@ -552,17 +554,17 @@ def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None
     }
 
     try:
-        get_rel_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){GITHUB_REPOSITORY}/releases/tags/{tag_name}"
-        res = requests.get(get_rel_url, headers=headers)
+        # Construct clean REST URL without spaces or brackets
+        get_rel_url = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
+        res = requests.get(get_rel_url.strip(), headers=headers)
         if res.status_code != 200:
-            print(f"  ⚠ Could not find release tag '{tag_name}': {res.text}")
+            print(f"  ⚠  Could not find release tag '{tag}': {res.text}")
             return None
 
         release_info = res.json()
         upload_url_template = release_info["upload_url"]
-        upload_url = (
-            upload_url_template.split("{")[0] + f"?name={file_path.name}"
-        )
+        base_upload_url = upload_url_template.split("{")[0]
+        upload_url = f"{base_upload_url}?name={urllib.parse.quote(file_path.name)}"
 
         with open(file_path, "rb") as f:
             file_data = f.read()
@@ -570,24 +572,18 @@ def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None
         upload_headers = headers.copy()
         upload_headers["Content-Type"] = "application/octet-stream"
 
-        upload_res = requests.post(
-            upload_url, headers=upload_headers, data=file_data
-        )
+        upload_res = requests.post(upload_url, headers=upload_headers, data=file_data)
         if upload_res.status_code in [200, 201]:
             asset_info = upload_res.json()
             download_url = asset_info.get("browser_download_url", "")
-            print(f"    ☁ Uploaded to GitHub Release: {file_path.name}")
+            print(f"    ☁  Uploaded to GitHub Release: {file_path.name}")
             return download_url
         else:
-            print(
-                f"    ⚠ Failed to upload asset {file_path.name}: {upload_res.text}"
-            )
+            print(f"    ⚠  Failed to upload asset {file_path.name}: {upload_res.text}")
             return None
 
     except Exception as e:
-        print(
-            f"    ⚠ Error uploading asset {file_path.name} to GitHub Release: {e}"
-        )
+        print(f"    ⚠  Error uploading asset {file_path.name} to GitHub Release: {e}")
         return None
 
 
