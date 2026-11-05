@@ -92,7 +92,7 @@ jobs:
           SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
           GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_TOKEN:           ${{ secrets.HF_TOKEN }}
           SEARCH_KEYWORD:     ${{ github.event.inputs.search_keyword }}
           SELECTED_GENRE:     ${{ github.event.inputs.genre || 'Film Noir' }}
           DATE_RANGE:         ${{ github.event.inputs.date_range || '1940-1959 (Classic Noir Era)' }}
