@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Noir Vault v2 – Dynamic Search-Driven & Remote Streaming Scene Extraction Pipeline
-Optimized with single-pass remote stream caching & FFmpeg clipping.
+Optimized with single-pass remote stream caching, FFmpeg clipping, and resilient Gemini AI analysis.
 """
 
 import gc
@@ -343,16 +343,22 @@ def analyse_scene_ai(title: str, year, scene_num: int, total: int, transcript: s
         "mood": "Moody, Tense",
         "noir_tropes": ["shadow play", "moral ambiguity"],
     }
-    if not GEMINI_OK or not GEMINI_API_KEY:
+    if not GEMINI_OK:
+        print("  ⚠ Gemini library (google-generativeai / google-genai) not available.")
+        return default
+
+    if not GEMINI_API_KEY:
+        print("  ⚠ GEMINI_API_KEY secret is missing or empty.")
         return default
 
     prompt = NOIR_PROMPT_TEMPLATE.format(
         title=title, year=year or "unknown", scene_num=scene_num, total_scenes=total, transcript=transcript[:500]
     )
 
-    candidate_models = ["gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro"]
+    candidate_models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash"]
     for model_name in candidate_models:
         try:
+            print(f"    🤖 Requesting Gemini analysis using model '{model_name}'...")
             if hasattr(genai, "Client"):
                 client = genai.Client(api_key=GEMINI_API_KEY)
                 resp = client.models.generate_content(model=model_name, contents=prompt)
@@ -363,8 +369,12 @@ def analyse_scene_ai(title: str, year, scene_num: int, total: int, transcript: s
                 resp = model_obj.generate_content(prompt)
                 raw_text = resp.text
 
-            raw = raw_text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+            raw = raw_text.strip()
+            raw = re.sub(r"^```(json)?", "", raw, flags=re.IGNORECASE).strip()
+            raw = re.sub(r"```$", "", raw).strip()
+            
             parsed = json.loads(raw)
+            print("    [✓] Gemini scene analysis generated successfully.")
             return {
                 "description": str(parsed.get("description", default["description"])),
                 "synopsis": str(parsed.get("synopsis", default["synopsis"])),
@@ -372,24 +382,19 @@ def analyse_scene_ai(title: str, year, scene_num: int, total: int, transcript: s
                 "noir_tropes": list(parsed.get("noir_tropes", default["noir_tropes"])),
             }
         except Exception as e:
-            if "404" in str(e) or "NOT_FOUND" in str(e):
-                continue
-            print(f"    ⚠ Gemini error ({model_name}): {e}")
-            return default
+            print(f"    ⚠ Gemini error on model '{model_name}': {e}")
+            continue
 
+    print("  ⚠ All Gemini model attempts failed; using fallback default descriptions.")
     return default
 
 
 def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None:
-    # Clean leading/trailing spaces, brackets, and quotes from repo and tag strings
     raw_repo = (GITHUB_REPOSITORY or "").strip().strip("[]'\"")
     tag = (tag_name or "").strip().strip("[]'\"")
-    
-    # Remove any extra spaces or brackets that might linger inside string variables
     repo = re.sub(r"[\[\]'\"]", "", raw_repo).strip()
-    
+
     if not GITHUB_TOKEN or not repo or not tag:
-        print("    ⚠ Missing GITHUB_TOKEN, repo, or release tag for upload.")
         return None
 
     headers = {
@@ -399,11 +404,9 @@ def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None
     }
 
     try:
-        # Construct clean GitHub REST API endpoint
         get_rel_url = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
         res = requests.get(get_rel_url, headers=headers)
         if res.status_code != 200:
-            print(f"    ⚠ Could not fetch release info ({res.status_code}): {res.text}")
             return None
 
         release_info = res.json()
@@ -421,8 +424,6 @@ def upload_asset_to_github_release(tag_name: str, file_path: Path) -> str | None
             download_url = upload_res.json().get("browser_download_url", "")
             print(f"    ☁ Uploaded to GitHub Release: {file_path.name}")
             return download_url
-        else:
-            print(f"    ⚠ Asset upload failed ({upload_res.status_code}): {upload_res.text}")
     except Exception as e:
         print(f"    ⚠ Upload asset error: {e}")
     return None
@@ -510,7 +511,7 @@ def process_movie(movie: dict, workspace: Path, output_dir: Path) -> dict | None
             "synopsis": ai_meta["synopsis"],
             "mood": ai_meta["mood"],
             "noir_tropes": ai_meta["noir_tropes"],
-            "thumbnail_url": "[https://images.unsplash.com/photo-1509023464722-18d996393ca8?w=640](https://images.unsplash.com/photo-1509023464722-18d996393ca8?w=640)",
+            "thumbnail_url": "https://images.unsplash.com/photo-1509023464722-18d996393ca8?w=640",
             "download_url": download_url,
             "release_tag": RELEASE_TAG,
             "clip_path": str(clip_path),

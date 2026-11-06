@@ -140,11 +140,12 @@ jobs:
         if: always()
         run: |
           mkdir -p output
-          if [ -n "$(ls -A output 2>/dev/null)" ]; then
-            zip -r output_videos.zip output/
-            echo "Successfully created output_videos.zip"
+          find . -name "*.mp4" | grep -v "temp_workspace" | zip -@ output_videos.zip || true
+          
+          if [ -f "output_videos.zip" ] && [ -s "output_videos.zip" ]; then
+            echo "Successfully created output_videos.zip with clips."
           else
-            echo "No clips found in output/ directory to zip."
+            echo "No .mp4 files found to archive, creating empty placeholder."
             touch output_videos.zip
           fi
 
