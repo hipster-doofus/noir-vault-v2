@@ -295,10 +295,18 @@ def detect_and_pick_scenes(sample_path: Path, n: int = SCENES_PER_MOVIE) -> list
 def transcode_scene(src: Path, start: float, end: float, dest: Path) -> bool:
     dur = end - start
     cmd = [
-        FFMPEG_BIN, "-y", "-ss", str(start), "-i", str(src), "-t", str(dur),
+        FFMPEG_BIN, "-y",
+        "-avoid_negative_ts", "make_zero",
+        "-ss", str(start),
+        "-i", str(src),
+        "-t", str(dur),
+        "-fflags", "+genpts",
         "-vf", "scale='if(lt(ih,1080),-2,iw)':'if(lt(ih,1080),1080,ih)':force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "22", "-c:a", "aac", "-b:a", "192k",
-        "-movflags", "+faststart", str(dest)
+        "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart",
+        str(dest)
     ]
     try:
         res = subprocess.run(cmd, capture_output=True, timeout=300)
