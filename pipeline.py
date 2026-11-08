@@ -66,7 +66,7 @@ SEARCH_KEYWORD = os.environ.get("SEARCH_KEYWORD", "").strip()
 SELECTED_GENRE = os.environ.get("SELECTED_GENRE", "All Genres").strip()
 DATE_RANGE = os.environ.get("DATE_RANGE", "All Eras").strip()
 PUBLIC_DOMAIN_ONLY = os.environ.get("PUBLIC_DOMAIN_ONLY", "true").lower().strip()
-NUM_MOVIES = int(os.environ.get("NUM_MOVIES", "10"))
+NUM_MOVIES = int(os.environ.get("NUM_MOVIES", "20"))
 ARCHIVE_ID_OVERRIDE = os.environ.get("ARCHIVE_ID_OVERRIDE", "").strip()
 SELECTED_MOVIES_JSON = os.environ.get("SELECTED_MOVIES_JSON", "[]").strip()
 
@@ -82,7 +82,7 @@ OUTPUT_DIR = Path("output")
 CATALOG_PATH = Path("catalog.json")
 
 SCENES_PER_MOVIE = int(os.environ.get("SCENES_PER_MOVIE", "10"))
-MIN_SCENE_SECS = 1
+MIN_SCENE_SECS = 2
 MAX_SCENE_SECS = 5
 
 GENRE_SEARCH_MAP = {
