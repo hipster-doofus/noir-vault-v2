@@ -296,23 +296,21 @@ def transcode_scene(src: Path, start: float, end: float, dest: Path) -> bool:
     dur = end - start
     cmd = [
         FFMPEG_BIN, "-y",
-        # 1. Input options (placed BEFORE -i)
+        # 1. Input options
         "-ss", str(start),
         "-i", str(src),
-        
-        # 2. Trim duration (placed AFTER -i for precise output trimming)
+        # 2. Trim duration
         "-t", str(dur),
-        
-        # 3. Video filters (fixed scale expression syntax and formatting)
-        "-vf", "scale=w='min(iw,1920)':h='min(ih,1080)':force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
-        
+        # 3. Video filters: Scale to fit inside 1920x1080 (upscale or downscale), then pad black bars
+        "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(1920-iw)/2:(1080-ih)/2:black",
         # 4. Audio filters & sync correction
         "-af", "aresample=async=1,loudnorm=I=-16:TP=-1.5:LRA=11",
-        
         # 5. Video & Audio Encoders
-        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-        "-c:a", "aac", "-b:a", "192k",
-        
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "22",
+        "-c:a", "aac",
+        "-b:a", "192k",
         # 6. Output flags & sync handling
         "-max_muxing_queue_size", "1024",
         "-movflags", "+faststart",
